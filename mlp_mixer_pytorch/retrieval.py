@@ -23,7 +23,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
 import wandb
 from torch.optim import SGD, AdamW, Adam
-
+import time
 from transformers import AutoConfig
 from transformers import BertConfig, BertModel, BertTokenizer
 # from models.cxrbert_origin import CXRBERT
@@ -322,6 +322,8 @@ def train(args, train_dataset, val_dataset, model, bert, tokenizer, dset):
     for epoch in range(int(args.epochs)):
         train_losses = []
         train_acc = []
+        f_time = []
+        b_time = []
         train_data_iter = tqdm(enumerate(train_dataset),
                                desc=f'EP_:{epoch}',
                                total=len(train_dataset),
@@ -347,28 +349,27 @@ def train(args, train_dataset, val_dataset, model, bert, tokenizer, dset):
                 patches = rearrange(input_img, 'b c (h s1) (w s2) -> b (h w) (s1 s2 c)', s1=16, s2=16)
                 # cls_embed = bert.embeddings(cls_tok)
                 txt_embed = bert.embeddings(input_txt)
-                # print("\n")
-                # print("patches", patches.shape)
-                # print("txt_embed", txt_embed.shape)
-
                 catput = torch.cat((txt_embed, patches), dim=1)
-                # print("catput", catput.shape)
 
-                # catput = torch.cat(cls_tok, input_txt, segment, input_img)
-                """input_txt torch.Size([20, 130])
-                segment torch.Size([140, 130])
-                cls_tok torch.Size([140, 1])
-                input_img torch.Size([140, 3, 512, 512])
-                labels torch.Size([140])"""
-                # input("STOP!!")
-
+                forward_start = time.monotonic()
                 logits = model(catput.to(args.device)).to(args.device)
-
+                f_time.append(time.monotonic() - forward_start)
+            
+            backward = time.monotonic()
             loss = criterion(logits.view(-1, 2), labels.view(-1))
+
+            gb_in_use = torch.cuda.max_memory_allocated() / (1024 * 1024 * 1024)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            b_time.append(time.monotonic() - backward)
+
+            print("\n")
+            print("gb_in_use torch.cuda.max_memory_allocated", round(gb_in_use, 3))
+            print("Model Forward Timing (sec)", round(np.mean(f_time), 5))
+            print("Model Backward Timing (sec)", round(np.mean(b_time), 5))            
+            print("\n\n")
 
             logits = torch.max(logits, 1)[1].data  # argmax
             scores = logits == labels
@@ -406,8 +407,14 @@ def train(args, train_dataset, val_dataset, model, bert, tokenizer, dset):
         if args.eval_during_training:  # and epoch > 4:
             test_result, test_label, test_losses, idx_lst = test(args, model, val_dataset)
             eval_result, Aligned_lst, mrr_score, recall_precision_results = evaluate(args, test_result, test_label, idx_lst)
-
+            f_time, b_time = [], []
             file_data = OrderedDict()
+
+            forward_start = time.monotonic()
+            f_time.append(time.monotonic() - forward_start)
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats
+            
             result_path = os.path.join(args.output_path, 'rank_result_at_eval.json')
             for result in Aligned_lst:
                 idx = result[0]
@@ -418,6 +425,17 @@ def train(args, train_dataset, val_dataset, model, bert, tokenizer, dset):
                     file_data["Result"] = data
                     json.dump(file_data, make_file, ensure_ascii=False)
                     make_file.write('\n')
+
+            backward = time.monotonic()
+            gb_in_use = torch.cuda.max_memory_allocated() / (1024 * 1024 * 1024)
+            b_time.append(time.monotonic() - backward)
+
+            print("\n")
+            print("Eval gb_in_use torch.cuda.max_memory_allocated", round(gb_in_use, 3))
+            print("Eval Model Forward Timing (sec)", round(np.mean(f_time), 5))
+            print("Eval Model Backward Timing(sec)", round(np.mean(b_time), 5))            
+            print("\n\n")
+
 
             if args.i2t:
                 assert not args.t2i
@@ -754,7 +772,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--epochs", type=int, default=50, help='number of epochs')
     parser.add_argument("--batch_size", type=int, default=128, help="number of batch size")
-    parser.add_argument("--num_workers", type=int, default=0, help="dataloader worker size")
+    parser.add_argument("--num_workers", type=int, default=8, help="dataloader worker size")
 
     # TODO: load pre-trained model or not
     parser.add_argument("--hidden_size", type=int, default=768, choices=[768, 512, 128])
