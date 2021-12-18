@@ -29,3 +29,10 @@ input embedding: cls, txt, sep, img
 output: matched or unmatched
 
 
+
+### Results
+
+Max memory: 15.903G
+
+Model forward time:
+Model backward time:
