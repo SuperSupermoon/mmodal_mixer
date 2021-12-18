@@ -3,12 +3,16 @@
 
 ## MLP-Mixer based Multi-modal image-text retrieval
 
+### Image:
 Original image is cropped with 16 x 16 patch size without overlap. Then, it is reshaped to (batch, (hxw), (patch x patch x channel)). 
+
+### Text:
 Also, original text is tokenized and embedded with BERT-based approach (BERT-base-uncased).
 
-
+### Data processing:
 When we train our model, we randomly samples(50 %) reports to make the matched- and un-matched image-text set.
 Basically, matched and un-matched set is classified with label information using chexpert labeler, we consider unmatched set when randomly sampled report is not exactly same with original one.
+
 
 Mixer based approach is trained efficiently with xxxx throuput with xxx accuracy.
 
