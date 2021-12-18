@@ -1,0 +1,33 @@
+diff --git a/mlp_mixer_pytorch/mlp_mixer_pytorch.py b/mlp_mixer_pytorch/mlp_mixer_pytorch.py
+index 028c6f3..8d4f522 100644
+--- a/mlp_mixer_pytorch/mlp_mixer_pytorch.py
++++ b/mlp_mixer_pytorch/mlp_mixer_pytorch.py
+@@ -1,6 +1,7 @@
+ from torch import nn
+ from functools import partial
+ from einops.layers.torch import Rearrange, Reduce
++import torch
+ 
+ class PreNormResidual(nn.Module):
+     def __init__(self, dim, fn):
+@@ -36,3 +37,19 @@ def MLPMixer(*, image_size, channels, patch_size, dim, depth, num_classes, expan
+         Reduce('b n c -> b c', 'mean'),
+         nn.Linear(dim, num_classes)
+     )
++
++if __name__ == '__main__':
++    model = MLPMixer(
++        image_size = 16,
++        channels = 3,
++        patch_size = 16,
++        dim = 512,
++        depth = 12,
++        num_classes = 1000
++    ).cuda()
++    img = torch.randn(16, 3, 256, 256)
++
++    pred = model(img.cuda()) # (1, 1000)
++    print("pred", pred)
++    print("shape of pred", pred.shape)
++    input("STOP!")
+\ No newline at end of file

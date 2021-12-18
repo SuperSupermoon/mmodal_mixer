@@ -1,0 +1,24 @@
+{
+    "os": "Linux-4.15.0-153-generic-x86_64-with-glibc2.10",
+    "python": "3.8.8",
+    "heartbeatAt": "2021-12-17T07:56:13.559878",
+    "startedAt": "2021-12-17T07:56:12.508457",
+    "docker": null,
+    "gpu": "GeForce RTX 3090",
+    "gpu_count": 8,
+    "cpu_count": 128,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "retrieval.py",
+    "codePath": "mlp_mixer_pytorch/retrieval.py",
+    "git": {
+        "remote": "https://github.com/lucidrains/mlp-mixer-pytorch.git",
+        "commit": "324121d19b9425b2eefe586d6e02de9f263da1e8"
+    },
+    "email": "jhak.moon@gmail.com",
+    "root": "/home/jhmoon/mlp-mixer-pytorch",
+    "host": "aiamdserver01",
+    "username": "jhmoon",
+    "executable": "/home/jhmoon/anaconda3/envs/torch_ot/bin/python"
+}
