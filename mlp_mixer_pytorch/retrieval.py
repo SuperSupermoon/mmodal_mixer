@@ -55,7 +55,10 @@ class CXR_Retrieval_Dataset(Dataset):
     def __init__(self, data_path, tokenizer, transforms, args, is_train=True):
         self.args = args
         self.data_dir = os.path.dirname(data_path)
+
+        # if self.data_dir
         self.data = [json.loads(line) for line in open(data_path)]
+
 
         self.num_image_embeds = args.num_image_embeds
         self.seq_len = args.seq_len
@@ -147,14 +150,8 @@ class CXR_Retrieval_Dataset(Dataset):
 
             print("image", image.shape)
             image = self.transforms(image)
-
-
             tokenized_sentence = self.tokenizer(origin_txt)  # ['i','ate','an','apple'], no special token
-            
-
             truncate_txt(tokenized_sentence, self.seq_len)
-
-
             encoded_sentence = [self.vocab_stoi[w] if w in self.vocab_stoi else self.vocab_stoi["[UNK]"]
                                     for w in tokenized_sentence]  # [178, 8756, 1126, 12075]
 
@@ -207,6 +204,13 @@ class CXR_Retrieval_Dataset(Dataset):
             input_ids = torch.tensor(input_ids)
             segment = torch.tensor(segment)
 
+            checkpa = img_path.split('/')
+            checkpath = '/'.join(checkpa[:3])
+            if checkpath == '/home/mimic-cxr':
+                if self.args.MIMIC_dset:
+                    img_path = '/home/data_storage/mimic-cxr/dataset/image_preprocessing/re_512_3ch/Valid/' + checkpa[-1]
+                else:
+                    img_path = '/home/data_storage/mimic-cxr/dataset/open_i/image_preprocessing/512_3ch/' + checkpa[-1]
 
             if self.args.img_channel == 3:
                 image = Image.open(os.path.join(self.data_dir, img_path))
@@ -224,7 +228,8 @@ def compute_ranks(args, results, labels, idx_lst):
     # print('len_ labels, result, idx_lst:', len(labels), len(results), len(idx_lst))
     similarities = np.array([results[i] for i in range(len(idx_lst))])
 
-    num_txt_per_img = args.eval_len_size
+    num_txt_per_img = len(labels)
+    print("num_txt_per_img", num_txt_per_img)
 
     labels = np.reshape(labels, [-1, num_txt_per_img])
     similarities = np.reshape(similarities, [-1, num_txt_per_img])
@@ -250,7 +255,7 @@ def compute_recall_precision(args, results, labels, idx_lst):
     labels = np.array(labels)
     similarities = np.array([results[i] for i in range(len(idx_lst))])
 
-    num_txt_per_img = args.eval_len_size
+    num_txt_per_img = len(labels)
 
     labels = np.reshape(labels, [-1, num_txt_per_img])
     similarities = np.reshape(similarities, [-1, num_txt_per_img])
@@ -294,7 +299,6 @@ def compute_mrr(ranks):
     print('mrr_score:', mrr_score)
     # mrr_score = np.mean(np.divide(1, ranks, out=np.zeros_like(ranks), where=ranks!=0))
     return mrr_score
-
 
 def evaluate(args, test_results, test_labels, idx_lst):  # hits at n score, n = [1, 5, 10]
     i2t_ranks, t2i_ranks, Aligned_lst = compute_ranks(args, test_results, test_labels, idx_lst)
@@ -352,24 +356,17 @@ def train(args, train_dataset, val_dataset, model, bert, tokenizer, dset):
                 catput = torch.cat((txt_embed, patches), dim=1)
 
                 forward_start = time.monotonic()
+                
                 logits = model(catput.to(args.device)).to(args.device)
                 f_time.append(time.monotonic() - forward_start)
             
             backward = time.monotonic()
             loss = criterion(logits.view(-1, 2), labels.view(-1))
 
-            gb_in_use = torch.cuda.max_memory_allocated() / (1024 * 1024 * 1024)
-
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             b_time.append(time.monotonic() - backward)
-
-            print("\n")
-            print("gb_in_use torch.cuda.max_memory_allocated", round(gb_in_use, 3))
-            print("Model Forward Timing (sec)", round(np.mean(f_time), 5))
-            print("Model Backward Timing (sec)", round(np.mean(b_time), 5))            
-            print("\n\n")
 
             logits = torch.max(logits, 1)[1].data  # argmax
             scores = logits == labels
@@ -386,6 +383,10 @@ def train(args, train_dataset, val_dataset, model, bert, tokenizer, dset):
                   f'loss : {round(loss.item(), 3)}({round(np.mean(train_losses), 3)}), '
                   f'score : {round(batch_acc, 3)}({round(np.mean(train_acc), 3)})')
 
+        print("\n")
+        print("Model Forward Timing (sec)", round(np.mean(f_time), 5))
+        print("Model Backward Timing (sec)", round(np.mean(b_time), 5))            
+        print("\n\n")
         wandb.log({
             "avg_loss": np.mean(train_losses),
             "retrieval_acc": np.mean(train_acc),
@@ -397,23 +398,22 @@ def train(args, train_dataset, val_dataset, model, bert, tokenizer, dset):
             os.chmod(save_path_per_ep, 0o777)
 
         if args.n_gpu > 1:
-            model.module.save_pretrained(save_path_per_ep)
+            # model.module.save_pretrained(save_path_per_ep)
+            torch.save({'epoch': epoch, 'state_dict': model.state_dict(), 'optimizer_state_dict': optimizer.state_dict()}, save_path_per_ep+'/model.pth')
+
             print(f'Multi_EP: {epoch} Model saved on {save_path_per_ep}')
         else:
-            model.save_pretrained(save_path_per_ep)
+            torch.save({'epoch': epoch, 'state_dict': model.state_dict(), 'optimizer_state_dict': optimizer.state_dict()}, save_path_per_ep+'/model.pth')
             print(f'Single_EP: {epoch} Model saved on {save_path_per_ep}')
 
         # Evaluate during training
         if args.eval_during_training:  # and epoch > 4:
-            test_result, test_label, test_losses, idx_lst = test(args, model, val_dataset)
-            eval_result, Aligned_lst, mrr_score, recall_precision_results = evaluate(args, test_result, test_label, idx_lst)
             f_time, b_time = [], []
-            file_data = OrderedDict()
-
             forward_start = time.monotonic()
+            test_result, test_label, test_losses, idx_lst = test(args, bert, model, val_dataset)
             f_time.append(time.monotonic() - forward_start)
-            torch.cuda.empty_cache()
-            torch.cuda.reset_peak_memory_stats
+            eval_result, Aligned_lst, mrr_score, recall_precision_results = evaluate(args, test_result, test_label, idx_lst)
+            file_data = OrderedDict()          
             
             result_path = os.path.join(args.output_path, 'rank_result_at_eval.json')
             for result in Aligned_lst:
@@ -426,14 +426,10 @@ def train(args, train_dataset, val_dataset, model, bert, tokenizer, dset):
                     json.dump(file_data, make_file, ensure_ascii=False)
                     make_file.write('\n')
 
-            backward = time.monotonic()
             gb_in_use = torch.cuda.max_memory_allocated() / (1024 * 1024 * 1024)
-            b_time.append(time.monotonic() - backward)
-
             print("\n")
             print("Eval gb_in_use torch.cuda.max_memory_allocated", round(gb_in_use, 3))
             print("Eval Model Forward Timing (sec)", round(np.mean(f_time), 5))
-            print("Eval Model Backward Timing(sec)", round(np.mean(b_time), 5))            
             print("\n\n")
 
 
@@ -467,7 +463,7 @@ def train(args, train_dataset, val_dataset, model, bert, tokenizer, dset):
             }, step=epoch)
 
 
-def test(args, model, eval_dataset):
+def test(args, bert, model, eval_dataset):
     model.eval()
     labels = []
     results_lst = []
@@ -475,6 +471,7 @@ def test(args, model, eval_dataset):
     softmax = nn.Softmax(dim=1)
     criterion = nn.CrossEntropyLoss()
     eval_losses = []
+    f_time =[]
 
     eval_data_iter = tqdm(enumerate(eval_dataset),
                           total=len(eval_dataset),
@@ -495,16 +492,23 @@ def test(args, model, eval_dataset):
 
                 logits = model(cls_tok, input_txt, attn_mask, segment, input_img, sep_tok)
             else:
-                input_txt = batch[0].to(args.device)
-                attn_mask = batch[1].to(args.device)
-                input_img = batch[2].to(args.device)
-                segment = batch[3].to(args.device)
+                input_txt = batch[0]
+                # attn_mask = batch[1].to(args.device)
+                input_img = batch[3]
+                # segment = batch[3].to(args.device)
+
+                patches = rearrange(input_img, 'b c (h s1) (w s2) -> b (h w) (s1 s2 c)', s1=16, s2=16)
+                txt_embed = bert.embeddings(input_txt)
+                catput = torch.cat((txt_embed, patches), dim=1)
 
                 label = batch[4].tolist()
                 idx = batch[5].tolist()
 
+                forward_start = time.monotonic()
+
                 # logits = model(input_txt, attn_mask, input_img, segment)
-                logits = model(cls_tok, input_txt, segment, input_img)
+                logits = model(catput.to(args.device)).to(args.device)
+                f_time.append(time.monotonic() - forward_start)
 
             labels.extend(label)
             idx_lst.extend(idx)
@@ -761,7 +765,7 @@ if __name__ == '__main__':
                                  '/home/data_storage/mimic-cxr/dataset/retrieval/openi/T2I_ID_Test_openi.jsonl',
                                  '/home/data_storage/mimic-cxr/dataset/retrieval/openi/I2T_ID_Test_openi.jsonl',])
 
-    output_path = 'output/' + str(datetime.now())
+    output_path = 'output/' + 'mixer'#str(datetime.now())
     if not os.path.exists(output_path):
         os.mkdir(output_path)
         os.chmod(output_path, 0o777)

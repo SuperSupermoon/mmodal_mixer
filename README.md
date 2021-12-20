@@ -17,6 +17,15 @@ Basically, matched and un-matched set is classified with label information using
 Mixer based approach is trained efficiently with xxxx throuput with xxx accuracy.
 
 
+
+### Exp settings.
+
+batch: 256 batch 
+epoch: 50 epoch
+
+
+
+
 ### Chest X-ray Image-reports retrieval
 Model spec:
 patch size:16, embedding dim: 768
@@ -36,3 +45,5 @@ Max memory: 15.903G
 
 Model forward time:
 Model backward time:
+
+
