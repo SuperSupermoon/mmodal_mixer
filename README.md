@@ -41,9 +41,5 @@ output: matched or unmatched
 
 ### Results
 
-Max memory: 15.903G
-
-Model forward time:
-Model backward time:
-
+![image](https://user-images.githubusercontent.com/47732974/146780704-d159b33f-720e-41fa-8ce8-df13680f1c0a.png)
 
