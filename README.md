@@ -1,5 +1,6 @@
 # mmodal_mixer
 
+![image](https://user-images.githubusercontent.com/47732974/146780955-da28d6e1-4192-4c0e-a2fe-f81edbc43ec2.png)
 
 ## MLP-Mixer based Multi-modal image-text retrieval
 
