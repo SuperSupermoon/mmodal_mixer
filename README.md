@@ -1,8 +1,6 @@
-# mmodal_mixer
+# M4 (MLP-Mixer based Multi-modal image-text retrieval)
 
 ![image](https://user-images.githubusercontent.com/47732974/146780955-da28d6e1-4192-4c0e-a2fe-f81edbc43ec2.png)
-
-## MLP-Mixer based Multi-modal image-text retrieval
 
 ### Image:
 Original image is cropped with 16 x 16 patch size without overlap. Then, it is reshaped to (batch, (hxw), (patch x patch x channel)). 
